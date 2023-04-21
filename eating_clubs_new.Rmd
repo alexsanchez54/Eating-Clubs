@@ -1,0 +1,134 @@
+---
+title: "Eating Clubs New"
+output: html_document
+date: "2023-04-20"
+---
+
+```{=html}
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Vertical dashed lines highlight Spring semester Dean's Dates. The red dashed line highlights the 2018 university-wide consent pledge intervention.
+
+Double-click an infraction type on the legend on the right to see data for only that infraction type.
+
+-   **sex_harm:** infractions that were coded as both sex & harm
+
+-   **null:** infractions that were neither sex, harm, or party
+
+-   **sexual_misconduct:** records of findings of responsibility in Title IX cases
+
+```{r code, echo = FALSE, results = FALSE, message=FALSE, warning=FALSE}
+# Load relevant libraries
+library(tidyverse)
+library(lubridate)
+library(estimatr)
+library(readxl)
+library(lemon)
+library(plotly)
+library(scales)
+library(gridExtra)
+library(htmltools)
+
+alldata_summary <- read.csv("alldata_summary.csv") |> 
+  select(-X) |> 
+  mutate(infr_date = ymd(infr_date)) |> 
+  mutate_at(vars(deans_date, spring_break, pledge, semester, 
+                treated_days, pre_deansdate_byyear), as.factor)
+
+alldata_tidy <- read.csv("alldata_tidy.csv") |> 
+  select(-X) |> 
+  mutate(infr_date = ymd(infr_date)) |> 
+  mutate_at(vars(deans_date, spring_break, pledge, semester, 
+                treated_days, pre_deansdate_byyear), as.factor)
+
+#Every day in May for 2008-2019
+plot_May <- 
+  alldata_tidy |> filter(month(infr_date) == 5) |> 
+  ggplot(aes(y = total, x = day(infr_date), color = infr_type, group = infr_type)) +
+  theme(axis.text.x = element_text(size = 5)) +
+  theme(axis.text.y = element_text(size = 5)) +
+  geom_point(size = 1) +
+  geom_line() +
+  geom_vline(data = alldata_summary |> filter(deans_date == 1 & year != 2018),
+             aes(xintercept = day(infr_date)), color = "black", linetype = "dashed", linewidth = 0.5) +
+  geom_vline(data = alldata_summary |> filter(deans_date == 1 & year == 2018),
+             aes(xintercept = day(infr_date)), color = "red", linetype = "dashed", linewidth = 0.5) +
+  facet_rep_wrap(~ year, repeat.tick.labels = TRUE, scales = "free_x") +
+  scale_y_continuous(limits = c(0, 20), breaks = seq(0, 20, by = 1)) +
+  scale_x_continuous(breaks = seq(0, 31, by = 1)) +
+  labs(title = "PADR data 2008-2019: month of May by day",
+       x = "Day of Month", 
+       y = "Number of infractions",
+       subtitle = "Vertical dashed lines highlight Spring semester Dean's Dates. The red dashed line highlights the 2018 university-wide consent pledge intervention.",
+       color = "Infraction type")
+
+plotly_May <- ggplotly(plot_May, dynamicTicks = FALSE, height = 600)
+
+# # Every day in April and May for 2008-2019
+plot_AprMay <-
+  alldata_tidy |> filter(month(infr_date) == 4 | month(infr_date) == 5) |>
+  ggplot(aes(y = total, x = infr_date, color = infr_type, group = infr_type)) +
+  theme(axis.text.x = element_text(angle = 90, size = 5)) +
+  theme(axis.text.y = element_text(size = 5)) +
+  geom_point(size = 1) +
+  geom_line() +
+  geom_vline(data = alldata_summary |> filter(deans_date == 1 & year != 2018),
+             aes(xintercept = as.numeric(infr_date)), color = "black", linetype = "dashed", linewidth = 0.5) +
+  geom_vline(data = alldata_summary |> filter(deans_date == 1 & year == 2018),
+             aes(xintercept = as.numeric(infr_date)), color = "red", linetype = "dashed", linewidth = 0.5) +
+  facet_rep_wrap(~ year, repeat.tick.labels = TRUE, scales = "free_x", ncol = 2) +
+  scale_y_continuous(limits = c(0, 20), breaks = seq(0, 20, by = 1)) +
+  scale_x_date(date_labels = "%d %b", date_breaks = "1 day", expand = c(0,0)) +
+  labs(title = "PADR data 2008-2019: April and May by day",
+       x = "Day",
+       y = "Number of infractions",
+       subtitle = "Vertical dashed lines highlight Spring semester Dean's Dates. The red dashed line highlights the 2018 university-wide consent pledge intervention.",
+       color = "Infraction type")
+
+plotly_AprMay <- ggplotly(plot_AprMay, dynamicTicks = FALSE, height = 1500)
+
+# Spring Semester 2008-2019
+plot_spring <- 
+  alldata_tidy |> 
+  ggplot(aes(y = total, x = infr_date, color = infr_type, group = infr_type)) +
+  theme(axis.text.x = element_text(angle = 90, size = 5)) +
+  theme(axis.text.y = element_text(size = 5)) +
+  geom_point(size = 1) +
+  geom_line() +
+    geom_vline(data = alldata_summary |> filter(deans_date == 1 & year != 2018),
+             aes(xintercept = as.numeric(infr_date)), color = "black", linetype = "dashed", linewidth = 0.5) +
+  geom_vline(data = alldata_summary |> filter(deans_date == 1 & year == 2018),
+             aes(xintercept = as.numeric(infr_date)), color = "red", linetype = "dashed", linewidth = 0.5) +
+  facet_rep_wrap(~ year, repeat.tick.labels = TRUE, ncol = 1, scales = "free_x") +
+  scale_x_date(date_labels = "%d %b", date_breaks = "1 day", expand = c(0,0)) +
+  scale_y_continuous(limits = c(0, 40), breaks = seq(0, 40, by = 1)) +
+  labs(title = "Campus police data: Spring 2008-2019",
+       x = "Day", 
+       y = "Number of infractions",
+       caption = "Vertical dashed lines highlight Spring semester Dean's Dates.",
+       color = "Infraction type")
+
+plotly_spring <- ggplotly(plot_spring, dynamicTicks = FALSE, height = 3000)
+```
+
+```{r plotly May, echo=FALSE, fig.width=14, fig.height=15, fig.align='left'}
+plotly_May
+```
+
+```{r plotly April & May, echo=FALSE, fig.width=14, fig.height=15, fig.align='left'}
+plotly_AprMay
+```
+
+```{r plotly Spring, echo=FALSE, fig.width=14, fig.height=50, fig.align='left'}
+plotly_spring
+```
