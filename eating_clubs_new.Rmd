@@ -1,5 +1,5 @@
 ---
-title: "Eating Clubs New"
+title: "Eating Clubs"
 output: html_document
 date: "2023-04-20"
 ---
@@ -98,14 +98,17 @@ plot_AprMay <-
 plotly_AprMay <- ggplotly(plot_AprMay, dynamicTicks = FALSE, height = 1500)
 
 # Spring Semester 2008-2019
-plot_spring <- 
-  alldata_tidy |> 
+plot_spring <-
+  alldata_tidy |>
   ggplot(aes(y = total, x = infr_date, color = infr_type, group = infr_type)) +
   theme(axis.text.x = element_text(angle = 90, size = 5)) +
   theme(axis.text.y = element_text(size = 5)) +
   geom_point(size = 1) +
   geom_line() +
-    geom_vline(data = alldata_summary |> filter(deans_date == 1 & year != 2018),
+    geom_rect(data = alldata_summary |> filter(spring_break == 1),
+            aes(xmin = infr_date - 0.5, xmax = infr_date + 0.5, ymin = 0, ymax = 40),
+            fill = "yellow", alpha = 0.2, inherit.aes = FALSE) +
+  geom_vline(data = alldata_summary |> filter(deans_date == 1 & year != 2018),
              aes(xintercept = as.numeric(infr_date)), color = "black", linetype = "dashed", linewidth = 0.5) +
   geom_vline(data = alldata_summary |> filter(deans_date == 1 & year == 2018),
              aes(xintercept = as.numeric(infr_date)), color = "red", linetype = "dashed", linewidth = 0.5) +
@@ -113,12 +116,13 @@ plot_spring <-
   scale_x_date(date_labels = "%d %b", date_breaks = "1 day", expand = c(0,0)) +
   scale_y_continuous(limits = c(0, 40), breaks = seq(0, 40, by = 1)) +
   labs(title = "Campus police data: Spring 2008-2019",
-       x = "Day", 
+       x = "Day",
        y = "Number of infractions",
        caption = "Vertical dashed lines highlight Spring semester Dean's Dates.",
        color = "Infraction type")
 
 plotly_spring <- ggplotly(plot_spring, dynamicTicks = FALSE, height = 3000)
+  
 ```
 
 ```{r plotly May, echo=FALSE, fig.width=14, fig.height=15, fig.align='left'}
@@ -128,6 +132,8 @@ plotly_May
 ```{r plotly April & May, echo=FALSE, fig.width=14, fig.height=15, fig.align='left'}
 plotly_AprMay
 ```
+
+Shaded yellow regions below represent Spring Break, when less undergrads are on campus.
 
 ```{r plotly Spring, echo=FALSE, fig.width=14, fig.height=50, fig.align='left'}
 plotly_spring
