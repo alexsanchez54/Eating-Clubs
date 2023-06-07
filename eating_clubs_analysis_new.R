@@ -302,6 +302,8 @@ for (i in 1:135) {
 results_df <- results_df |> 
   filter(year(pre_pledge_cutoff) == 2018)
 
+# bandwidths <- results_df |> filter(p_value < .05)
+
 plot1 <- 
   results_df |> 
   ggplot(aes(x = pre_pledge_cutoff, y = p_value)) +
@@ -851,7 +853,6 @@ plotly6 <- ggplotly(plot6, dynamicTicks = FALSE, height = 3000)
 
 # set the cutoff to an arbitrary ~midway point when p <.05 in OG data
 # Mar 26 cutoff; day_by_year = 85; 50 days before pledge on May 15
-# highest Cohen's d when p < .05 was Apr 14 cutoff; day_by_year = 104; 31 days before pledge on May 15
 
 alldata_summary <- alldata_summary |>
   mutate(treated_days = if_else(year == 2018 & day_by_year >= (135 - 0) & day_by_year <= (156 - 5*1), 1, 0))
@@ -974,3 +975,145 @@ plot7 <-
 #ggsave(filename = "my_plot7.png", plot = plot7, width = 10, height = 30, dpi = 300)
 
 plotly7 <- ggplotly(plot7, dynamicTicks = FALSE, height = 3000)
+
+
+###### Loop through all the bandwidths where OG data was p < .5 ######
+
+# Define sequences for a and b
+a_values <- seq(70, 107)
+b_values <- seq(65, 28)
+
+# 1st-order loop
+for (index in 1:length(a_values)) {
+  a <- a_values[index]
+  b <- b_values[index]
+  
+  alldata_summary <- alldata_summary |>
+    mutate(treated_days = if_else(year == 2018 & day_by_year >= (135 - 0) & day_by_year <= (156 - 5*1), 1, 0))
+  
+  # Initialize an empty dataframe to store results
+  results_df <- data.frame()
+  
+  # Date range
+  # Initialize empty vector
+  dates <- c()
+  
+  # Generate dates for 2018
+  dates_2018 <- seq.Date(as.Date("2018-05-15"), length.out = a, by = "-1 day")
+  
+  # Loop through the years in reverse order
+  for (year in 2018:2008) {
+    # Replace the year in dates_2018 with the current year
+    dates_year <- as.Date(paste(year, format(dates_2018, "%m-%d"), sep = "-"))
+    
+    # Append this year's dates to the overall vector
+    dates <- c(dates, dates_year)
+  }
+  
+  # Convert the numeric dates back to Date format
+  dates <- as.Date(dates, origin = "1970-01-01")
+  
+  # Create a data frame with the dates as a column named new_pledge_start
+  dates <- data.frame(new_pledge_start = dates)
+  
+  #2nd-order loop
+  for (j in 1:11) {
+    new_pledge_year <- 2019 - j
+    
+    #3rd-order loop
+    for (i in 1:a) {
+      
+      #shift the pledge period 1 day backwards
+      new_pledge_start <- 136 - i
+      new_pledge_end <- 152 - i
+      
+      #update variables influenced by pledge period
+      new_data <- alldata_summary |>
+        mutate(pledge = ifelse(year == new_pledge_year & day_by_year == new_pledge_start, 1, 0))
+      
+      new_data <- new_data |> # Alex combine with above later
+        mutate(treated_days = if_else(year == new_pledge_year & day_by_year >= new_pledge_start & day_by_year <= new_pledge_end, 1, 0))
+      
+      new_data <- new_data |>
+        mutate(deans_date = case_when(
+          year != new_pledge_year & infr_date %in% deans_date_dates ~ 1,
+          year == new_pledge_year & pledge == 1 ~ 1,
+          TRUE ~ 0))
+      
+      new_data <- new_data |>
+        group_by(year) |> 
+        mutate(post_deansdate = ifelse(infr_date >= infr_date[deans_date == 1], 1, 0)) |> 
+        mutate_at(vars(pledge, deans_date, post_deansdate), as.factor)
+      
+      #Filter the data
+      new_data <- new_data |> filter(day_by_year >= new_pledge_start - b)
+      
+      # include spring_break as a control when appropriate
+      formula <- if (length(unique(new_data$spring_break)) == 2) {
+        not_null ~ deans_date + pledge + treated_days + post_deansdate + spring_break
+      } else {
+        not_null ~ deans_date + pledge + treated_days + post_deansdate
+      }
+      
+      #Fit the model
+      fit <- lm(formula, data = new_data)
+      
+      # Get the coefficients
+      coef_summary <- summary(fit)$coefficients
+      
+      # Get the estimate and p-value for treated_days
+      treated_days_coef <- coef_summary["treated_days", c("Estimate", "Pr(>|t|)")]
+      
+      # Calculate Cohen's D
+      cohens_d <- cohensD(not_null ~ treated_days, data = new_data)
+      
+      # Transpose the result and convert it to a dataframe
+      df <- data.frame(t(treated_days_coef), cohens_d)
+      
+      #Add a column to indicate the year of the new pledge
+      df$new_pledge_year <- 2019 - j
+      
+      #Add a column to indicate the pre-pledge cutoff date
+      df$cutoff_date <- new_data$infr_date[new_data$year == new_pledge_year & new_data$day_by_year == new_pledge_start - b]
+      
+      # Append the results to results_df
+      results_df <- rbind(results_df, df)
+    }
+    
+  }
+  
+  #add the dates column
+  results_df <- cbind(results_df, dates)
+  
+  #rename variables
+  results_df <- results_df |>
+    rename("estimate" = "Estimate",
+           "p_value" = "Pr...t..")
+  
+  #add a column indicating the direction of the treatment effect
+  results_df$direction <- ifelse(results_df$estimate >= 0, "positive", "negative")
+  
+  plot_title <- paste("P values for the effect of placebo pledge periods (17 days) on subsequent # of infractions, with a cutoff of", b, "days before the pledge")
+  plot_file <- paste("tables/plot", b, ".png", sep = "")
+  plotly_var <- paste("plotly", b, sep = "")
+  
+  plot <-
+    results_df |>
+    ggplot(aes(x = new_pledge_start, y = p_value, color = direction)) +
+    theme(axis.text.x = element_text(angle = 90, size = 5)) +
+    theme(axis.text.y = element_text(size = 5)) +
+    geom_point(aes(alpha = cohens_d), size = 2) +
+    geom_hline(yintercept = 0.05, linetype = 2, color = "red") +
+    facet_rep_wrap(~ new_pledge_year, repeat.tick.labels = TRUE, ncol = 1, scales = "free_x") +
+    scale_x_date(date_labels = "%d %b", date_breaks = "1 day", expand = c(0,0)) +
+    labs(title = plot_title,
+         caption = "The more opaque the points, the larger the Cohen's d effect size",
+         x = "Placebo pledge start date",
+         y = "p value",
+         alpha = "")
+  
+  ggsave(filename = plot_file, plot = plot, width = 10, height = 30, dpi = 300)
+  
+  plotly_var <- ggplotly(plot, dynamicTicks = FALSE, height = 3000)
+  
+} ; beep()
